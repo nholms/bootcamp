@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 pub enum Status {
     Open,
     InProgress,
@@ -6,17 +8,16 @@ pub enum Status {
 }
 
 pub struct Epic {
-    pub id: i32,
     pub name: String,
     pub description: String,
     pub status: Status,
-    pub stories: Vec<Story>,
+    // Story Id's
+    pub stories: Vec<u32>,
 }
 
 impl Epic {
     pub fn new(name: String, description: String) -> Self {
-        Epic {
-            id: 0,
+        Self {
             name: name,
             description: description,
             status: Status::Open,
@@ -26,7 +27,6 @@ impl Epic {
 }
 
 pub struct Story {
-    pub id: i32,
     pub name: String,
     pub description: String,
     pub status: Status,
@@ -34,8 +34,7 @@ pub struct Story {
 
 impl Story {
     pub fn new(name: String, description: String) -> Self {
-        Story {
-            id: 0,
+        Self {
             name: name,
             description: description,
             status: Status::Open,
@@ -45,6 +44,6 @@ impl Story {
 
 pub struct DBState {
     pub last_item_id: i32,
-    pub epics: Vec<Epic>,
-    pub stories: Vec<Story>,
+    pub epics: HashMap<u32, Epic>,
+    pub stories: HashMap<u32, Story>,
 }

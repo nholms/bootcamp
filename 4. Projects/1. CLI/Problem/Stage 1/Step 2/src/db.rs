@@ -16,7 +16,10 @@ impl Database for JSONFileDatabase {
         if self.file_path.is_empty() {
             return Err(anyhow!("File path was empty..."));
         }
+
+        // Returns error on not-exist
         let content = fs::read_to_string(self.file_path.clone())?;
+
         match serde_json::from_str(content.as_str()) {
             Ok(state) => Ok(state),
             Err(e) => Err(anyhow!(e)),
