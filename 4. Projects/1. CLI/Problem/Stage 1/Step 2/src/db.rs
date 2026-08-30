@@ -1,6 +1,6 @@
-use crate::models::{DBState, Epic, Status, Story};
+use crate::models::DBState;
 use anyhow::{anyhow, Result};
-use std::{collections::HashMap, fs, hash::Hash};
+use std::fs;
 
 trait Database {
     fn read_db(&self) -> Result<DBState>; // Default E = Error
@@ -43,8 +43,9 @@ mod tests {
     use super::*;
 
     mod database {
-        use std::collections::HashMap;
-        use std::io::Write;
+        use std::{collections::HashMap, io::Write};
+
+        use crate::models::{Epic, Status, Story};
 
         use super::*;
 

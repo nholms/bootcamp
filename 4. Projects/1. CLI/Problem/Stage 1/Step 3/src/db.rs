@@ -1,8 +1,6 @@
-use std::{collections::hash_map::Entry, fs};
-
-use anyhow::{anyhow, Result};
-
 use crate::models::{DBState, Epic, Status, Story};
+use anyhow::{anyhow, Result};
+use std::{collections::hash_map::Entry, fs};
 
 pub struct JiraDatabase {
     database: Box<dyn Database>,
@@ -28,19 +26,15 @@ impl JiraDatabase {
         // Get the state we're working with.
         let mut state = self.database.read_db()?;
 
-        // Using an implied next id here.
+        // Using an implied next id here based on the JSON sample
         let next_id = (state.epics.len() + 1) as u32;
 
-        // TODO: No guards or explicit id field
-
-        // Write:
-        // TODO: Epic is valid?
-        if let Some(_) = state.epics.insert(next_id, epic) {
-            self.database.write_db(&state)?;
-            return Ok(next_id);
-        } else {
-            return Err(anyhow!("Failed to save epic state..."));
-        }
+        // Use entry API
+        state.epics.entry(next_id).or_insert(epic);
+        // Set last_id
+        state.last_item_id = next_id;
+        self.database.write_db(&state)?;
+        return Ok(next_id);
     }
 
     pub fn create_story(&self, story: Story, epic_id: u32) -> Result<u32> {
@@ -48,18 +42,20 @@ impl JiraDatabase {
         let mut state = self.database.read_db()?;
         let next_id = (state.stories.len() + 1) as u32;
 
-        // TODO: Story is valid?
-        if let Some(_) = state.stories.insert(next_id, story) {
-            // TODO: Epic exists?
-            // Add to epic
-            state
-                .epics
-                .entry(epic_id)
-                .and_modify(|epic| epic.stories.push(next_id));
-            return Ok(next_id);
-        } else {
-            return Err(anyhow!("Failed to save story...."));
-        }
+        // Use entry API
+        state.stories.entry(next_id).or_insert(story);
+        state.last_item_id = next_id;
+
+        // Add to epic
+        state
+            .epics
+            .entry(epic_id)
+            .and_modify(|epic| epic.stories.push(next_id));
+
+        // TODO: Could add or_insert for associated epics?
+        // OR Validate before create_story
+
+        Ok(next_id)
     }
 
     pub fn delete_epic(&self, epic_id: u32) -> Result<()> {
@@ -67,7 +63,7 @@ impl JiraDatabase {
         if let None = state.epics.remove(&epic_id) {
             Err(anyhow!("Failed to remove Epic: {epic_id}"))
         } else {
-            self.database.write_db(&state);
+            self.database.write_db(&state)?;
             Ok(())
         }
     }
@@ -84,7 +80,7 @@ impl JiraDatabase {
         if let None = state.stories.remove(&story_id) {
             Err(anyhow!("Failed to remove story.."))
         } else {
-            self.database.write_db(&state);
+            self.database.write_db(&state)?;
             Ok(())
         }
     }
@@ -159,14 +155,12 @@ pub mod test_utils {
 
     impl Database for MockDB {
         fn read_db(&self) -> Result<DBState> {
-            // TODO: fix this error by deriving the appropriate traits for Story
             let state = self.last_written_state.borrow().clone();
             Ok(state)
         }
 
         fn write_db(&self, db_state: &DBState) -> Result<()> {
             let latest_state = &self.last_written_state;
-            // TODO: fix this error by deriving the appropriate traits for DBState
             *latest_state.borrow_mut() = db_state.clone();
             Ok(())
         }
@@ -185,7 +179,6 @@ mod tests {
         };
         let epic = Epic::new("".to_owned(), "".to_owned());
 
-        // TODO: fix this error by deriving the appropriate traits for Epic
         let result = db.create_epic(epic.clone());
 
         assert_eq!(result.is_ok(), true);
@@ -226,7 +219,6 @@ mod tests {
 
         let epic_id = result.unwrap();
 
-        // TODO: fix this error by deriving the appropriate traits for Story
         let result = db.create_story(story.clone(), epic_id);
         assert_eq!(result.is_ok(), true);
 
