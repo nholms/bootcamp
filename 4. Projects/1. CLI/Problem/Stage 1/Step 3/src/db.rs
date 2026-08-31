@@ -26,36 +26,49 @@ impl JiraDatabase {
         // Get the state we're working with.
         let mut state = self.database.read_db()?;
 
-        // Using an implied next id here based on the JSON sample
-        let next_id = (state.epics.len() + 1) as u32;
+        // Retrieve from last_id
+        let next_id = state.last_item_id + 1;
 
         // Use entry API
         state.epics.entry(next_id).or_insert(epic);
+
         // Set last_id
         state.last_item_id = next_id;
+
+        // Save
         self.database.write_db(&state)?;
+
         return Ok(next_id);
     }
 
     pub fn create_story(&self, story: Story, epic_id: u32) -> Result<u32> {
         // Similar to Epic
         let mut state = self.database.read_db()?;
-        let next_id = (state.stories.len() + 1) as u32;
+        let next_id = state.last_item_id + 1;
 
         // Use entry API
         state.stories.entry(next_id).or_insert(story);
         state.last_item_id = next_id;
 
-        // Add to epic
-        state
-            .epics
-            .entry(epic_id)
-            .and_modify(|epic| epic.stories.push(next_id));
+        // Add story to epic:
+        // Guard the epic with entry API match
+        match state.epics.entry(epic_id) {
+            Entry::Occupied(mut occ) => {
+                let edit = occ.get_mut();
 
-        // TODO: Could add or_insert for associated epics?
-        // OR Validate before create_story
+                // Push new story id
+                edit.stories.push(next_id);
 
-        Ok(next_id)
+                // Save as last_item
+                state.last_item_id = next_id;
+
+                // Save
+                self.database.write_db(&state)?;
+
+                Ok(next_id)
+            }
+            Entry::Vacant(_) => Err(anyhow!("Epic doesn't exist...")),
+        }
     }
 
     pub fn delete_epic(&self, epic_id: u32) -> Result<()> {
