@@ -1,5 +1,6 @@
 use crate::models::{DBState, Epic, Status, Story};
 use anyhow::{anyhow, Result};
+use std::result::Result::Ok; // Was getting anyhow::Ok ??
 use std::{collections::hash_map::Entry, fs};
 
 pub struct JiraDatabase {
@@ -55,16 +56,12 @@ impl JiraDatabase {
         match state.epics.entry(epic_id) {
             Entry::Occupied(mut occ) => {
                 let edit = occ.get_mut();
-
                 // Push new story id
                 edit.stories.push(next_id);
-
                 // Save as last_item
                 state.last_item_id = next_id;
-
                 // Save
                 self.database.write_db(&state)?;
-
                 Ok(next_id)
             }
             Entry::Vacant(_) => Err(anyhow!("Epic doesn't exist...")),
@@ -73,28 +70,46 @@ impl JiraDatabase {
 
     pub fn delete_epic(&self, epic_id: u32) -> Result<()> {
         let mut state = self.database.read_db()?;
-        if let None = state.epics.remove(&epic_id) {
-            Err(anyhow!("Failed to remove Epic: {epic_id}"))
-        } else {
-            self.database.write_db(&state)?;
-            Ok(())
+
+        // Get epic
+        match state.epics.entry(epic_id) {
+            Entry::Vacant(_) => Err(anyhow!("Epic does not exist...")),
+            Entry::Occupied(occ) => {
+                // Remove story from state
+                for i in &occ.get().stories {
+                    state.stories.remove(&i);
+                }
+                occ.remove_entry();
+                // Save
+                self.database.write_db(&state)?;
+                Ok(())
+            }
         }
     }
 
     pub fn delete_story(&self, epic_id: u32, story_id: u32) -> Result<()> {
         let mut state = self.database.read_db()?;
 
-        // Remove from epic first
-        state.epics.entry(epic_id).and_modify(|epic| {
-            epic.stories.remove(story_id as usize);
-            ()
-        });
-        // Remove story
-        if let None = state.stories.remove(&story_id) {
-            Err(anyhow!("Failed to remove story.."))
-        } else {
-            self.database.write_db(&state)?;
-            Ok(())
+        // Eval epic first
+        match state.epics.entry(epic_id) {
+            Entry::Vacant(_) => Err(anyhow!("Epic '{epic_id}' does not exist")),
+            Entry::Occupied(mut occ) => {
+                let epic = occ.get_mut();
+                // Find story indexes in epic
+                if epic.stories.iter().any(|v| *v == story_id) {
+                    // Remove story from epic |> RETAIN Vec<u32>
+                    epic.stories.retain(|id| *id != story_id);
+                    // Remove story DBState |> REMOVE HashMap
+                    state.stories.remove(&story_id);
+                    // Save
+                    self.database.write_db(&state)?;
+                    Ok(())
+                } else {
+                    Err(anyhow!(
+                        "Epic does not contain the story with id {story_id}"
+                    ))
+                }
+            }
         }
     }
 
@@ -105,6 +120,7 @@ impl JiraDatabase {
             Entry::Occupied(mut e) => {
                 let entry = e.get_mut();
                 entry.status = status;
+                self.database.write_db(&state)?;
                 Ok(())
             }
         }
@@ -117,6 +133,7 @@ impl JiraDatabase {
             Entry::Occupied(mut e) => {
                 let entry = e.get_mut();
                 entry.status = status;
+                self.database.write_db(&state)?;
                 Ok(())
             }
         }
